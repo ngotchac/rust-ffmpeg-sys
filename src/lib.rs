@@ -1,11 +1,22 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
+use std::path::Path;
+use std::fs::File;
+use std::io::prelude::*;
 
-extern crate libc;
+const FFMPEG_BIN: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ffmpeg"));
+const FFPROBE_BIN: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ffprobe"));
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+pub fn install_ffmpeg<T>(dir_path: T) -> std::io::Result<()>
+  where T: AsRef<Path>
+{
+  let mut file = File::create(dir_path.as_ref().join("ffmpeg"))?;
+  file.write_all(FFMPEG_BIN)?;
+  Ok(())
+}
 
-#[macro_use]
-mod avutil;
-pub use avutil::*;
+pub fn install_ffprobe<T>(dir_path: T) -> std::io::Result<()>
+  where T: AsRef<Path>
+{
+  let mut file = File::create(dir_path.as_ref().join("ffprobe"))?;
+  file.write_all(FFPROBE_BIN)?;
+  Ok(())
+}
