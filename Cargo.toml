@@ -12,20 +12,21 @@ repository  = "https://github.com/meh/rust-ffmpeg-sys"
 keywords    = ["audio", "video"]
 
 [dependencies]
-libc = "0.2.51"
 
 [build-dependencies]
 num_cpus = "1.10.0"
-cc = "1.0.35"
-pkg-config = "0.3.14"
-bindgen    = "0.47.0"
-regex      = "1.1.6"
 
 [features]
-default  = ["build", "avcodec", "avdevice", "avfilter", "avformat", "swresample", "swscale"]
+default = [
+  "build-license-gpl",
+  "build-license-nonfree",
+  "build-license-version3",
+  "build-lib-x264",
+  "build-lib-fdk-aac",
+  "postproc",
+]
 
-static = []
-build  = ["static"]
+build = []
 
 # licensing
 build-license-gpl      = ["build"]

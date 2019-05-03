@@ -55,6 +55,11 @@ fn search() -> PathBuf {
 }
 
 fn fetch() -> io::Result<()> {
+    if let Ok(meta) = fs::metadata(&source()) {
+        if meta.is_dir() {
+            return Ok(());
+        }
+    }
     let status = try!(
         Command::new("git")
             .current_dir(&output())
@@ -74,14 +79,21 @@ fn fetch() -> io::Result<()> {
     }
 }
 
+// fn switch(configure: &mut Command, feature: &str, name: &str) {
+//     let arg = if env::var("CARGO_FEATURE_".to_string() + feature).is_ok() {
+//         "--enable-"
+//     }
+//     else {
+//         "--disable-"
+//     };
+//     configure.arg(arg.to_string() + name);
+// }
+
 fn switch(configure: &mut Command, feature: &str, name: &str) {
-    let arg = if env::var("CARGO_FEATURE_".to_string() + feature).is_ok() {
-        "--enable-"
+    if env::var("CARGO_FEATURE_".to_string() + feature).is_ok() {
+        configure.arg(format!("--enable-{}", name));
     }
-    else {
-        "--disable-"
-    };
-    configure.arg(arg.to_string() + name);
+    
 }
 
 fn build() -> io::Result<()> {
@@ -93,14 +105,11 @@ fn build() -> io::Result<()> {
         configure.arg(format!("--cross-prefix={}-", env::var("TARGET").unwrap()));
     }
 
-    // control debug build
-    if env::var("DEBUG").is_ok() {
-        configure.arg("--enable-debug");
-        configure.arg("--disable-stripping");
-    } else {
-        configure.arg("--disable-debug");
-        configure.arg("--enable-stripping");
-    }
+    configure.arg("--disable-doc");
+    configure.arg("--disable-ffplay");
+
+    configure.arg("--disable-debug");
+    configure.arg("--enable-stripping");
 
     // make it static
     configure.arg("--enable-static");
@@ -202,6 +211,8 @@ fn build() -> io::Result<()> {
 
     // run ./configure
     {
+        eprintln!("Running: {:?}", configure);
+
         let output = configure
             .output()
             .expect(&format!("{:?} failed", configure));
@@ -231,18 +242,22 @@ fn build() -> io::Result<()> {
     }
 
     // run make install
-    if !try!(
-        Command::new("make")
-            .current_dir(&source())
-            .arg("install")
-            .status()
-    ).success()
-    {
-        return Err(io::Error::new(io::ErrorKind::Other, "make install failed"));
-    }
+    // if !try!(
+    //     Command::new("make")
+    //         .current_dir(&source())
+    //         .arg("install")
+    //         .status()
+    // ).success()
+    // {
+    //     return Err(io::Error::new(io::ErrorKind::Other, "make install failed"));
+    // }
 
+    // Copy over the binaries
     fs::rename(source().join("ffmpeg"), output().join("ffmpeg"))?;
     fs::rename(source().join("ffprobe"), output().join("ffprobe"))?;
+
+    // Remove the source and dist directory
+    fs::remove_dir_all(source())?;
 
     Ok(())
 }
