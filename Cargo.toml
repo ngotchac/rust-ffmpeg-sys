@@ -22,7 +22,6 @@ default = [
   "build-license-nonfree",
   "build-license-version3",
   "build-lib-x264",
-  "build-lib-faac",
   "postproc",
 ]
 
