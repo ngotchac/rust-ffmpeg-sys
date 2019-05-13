@@ -96,10 +96,56 @@ fn switch(configure: &mut Command, feature: &str, name: &str) {
     
 }
 
+fn build_libx264() -> io::Result<()> {
+    let fetch_status = Command::new("git")
+        .current_dir(&output())
+        .arg("clone")
+        .arg("--depth=1")
+        .arg("git://git.videolan.org/x264.git")
+        .status();
+    let fetch_status = match fetch_status {
+        Ok(status) => status,
+        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 fetch failed - make sure git is installed")),
+    };
+    if !fetch_status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, "x264 fetch failed"))
+    }
+
+    let configure_status = Command::new("./configure")
+        .current_dir(&output().join("x264"))
+        .arg("--prefix").arg(search())
+        .arg("--bindir").arg(output().join("bin"))
+        .arg("--enable-static")
+        .arg("--disable-asm")
+        .status();
+    let configure_status = match configure_status {
+        Ok(status) => status,
+        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 configure failed")),
+    };
+    if !configure_status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, "x264 configure failed"))
+    }
+
+    let make_status = Command::new("make")
+        .current_dir(&output().join("x264"))
+        .status();
+    let make_status = match make_status {
+        Ok(status) => status,
+        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 make failed")),
+    };
+    if !make_status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, "x264 make failed"))
+    }
+
+    Ok(())
+}
+
 fn build() -> io::Result<()> {
     let mut configure = Command::new("./configure");
     configure.current_dir(&source());
     configure.arg(format!("--prefix={}", search().to_string_lossy()));
+    configure.arg(format!("--extra-cflags=\"-I{}\"", search().join("include").to_string_lossy()));
+    configure.arg(format!("--extra-ldflags=\"-L{}\"", search().join("lib").to_string_lossy()));
 
     if env::var("TARGET").expect("`TARGET` is always set in build; qed") != 
         env::var("HOST").expect("`HOST` is always set in build; qed") {
@@ -268,6 +314,7 @@ fn main() {
         fs::create_dir_all(&output())
             .ok()
             .expect("failed to create build directory");
+        build_libx264().expect("build x264 failed");
         fetch().expect("fetch failed");
         build().expect("build failed");
     }
