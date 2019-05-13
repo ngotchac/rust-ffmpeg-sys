@@ -60,23 +60,16 @@ fn fetch() -> io::Result<()> {
             return Ok(());
         }
     }
-    let status = try!(
-        Command::new("git")
-            .current_dir(&output())
-            .arg("clone")
-            .arg("-b")
-            .arg("ts-offset")
-            .arg("--depth=1")
-            .arg("https://github.com/ngotchac/FFmpeg.git")
-            .arg(format!("ffmpeg-{}", version()))
-            .status()
-    );
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::new(io::ErrorKind::Other, "fetch failed"))
-    }
+    let mut git_fetch = Command::new("git");
+    git_fetch.current_dir(&output())
+        .arg("clone")
+        .arg("-b")
+        .arg("ts-offset")
+        .arg("--depth=1")
+        .arg("https://github.com/ngotchac/FFmpeg.git")
+        .arg(format!("ffmpeg-{}", version()));
+    run_cmd(git_fetch)?;
+    Ok(())
 }
 
 // fn switch(configure: &mut Command, feature: &str, name: &str) {
@@ -96,57 +89,68 @@ fn switch(configure: &mut Command, feature: &str, name: &str) {
     
 }
 
+fn run_cmd(mut cmd: Command) -> io::Result<()> {
+    eprintln!("Running command: {:?}", cmd);
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Failed: {}",
+                    e,
+                ),
+            ));
+        },
+    };
+    if !output.status.success() {
+        println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Failed {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn fetch_libx264() -> io::Result<()> {
     if let Ok(meta) = fs::metadata(&output().join("x264")) {
         if meta.is_dir() {
             return Ok(());
         }
     }
-    let fetch_status = Command::new("git")
-        .current_dir(&output())
+    let mut fetch_cmd = Command::new("git");
+    fetch_cmd.current_dir(&output())
         .arg("clone")
         .arg("--depth=1")
-        .arg("git://git.videolan.org/x264.git")
-        .status();
-    let fetch_status = match fetch_status {
-        Ok(status) => status,
-        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 fetch failed - make sure git is installed")),
-    };
-    if !fetch_status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "x264 fetch failed"))
-    }
+        .arg("git://git.videolan.org/x264.git");
+    run_cmd(fetch_cmd)?;
     Ok(())
 }
 
 fn build_libx264() -> io::Result<()> {
     fetch_libx264()?;
 
-    let configure_status = Command::new("./configure")
-        .current_dir(&output().join("x264"))
+    let x264_path = output().join("x264");
+    let mut configure = Command::new("./configure");
+    configure.current_dir(&x264_path)
         .arg(format!("--prefix={}", search().to_string_lossy()))
         .arg(format!("--bindir={}", output().join("bin").to_string_lossy()))
         .arg("--enable-static")
-        .arg("--disable-shared")
-        .arg("--disable-asm")
-        .status();
-    let configure_status = match configure_status {
-        Ok(status) => status,
-        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 configure failed")),
-    };
-    if !configure_status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "x264 configure failed"))
-    }
+        .arg("--disable-asm");
+    run_cmd(configure)?;
 
-    let make_status = Command::new("make")
-        .current_dir(&output().join("x264"))
-        .status();
-    let make_status = match make_status {
-        Ok(status) => status,
-        Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "x264 make failed")),
-    };
-    if !make_status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "x264 make failed"))
-    }
+    let mut make = Command::new("make");
+    make.current_dir(&x264_path);
+    run_cmd(make)?;
+
+    let mut make_install = Command::new("make");
+    make_install.current_dir(&x264_path).arg("install");
+    run_cmd(make_install)?;
 
     Ok(())
 }
@@ -269,36 +273,14 @@ fn build() -> io::Result<()> {
     enable!(configure, "BUILD_PIC", "pic");
 
     // run ./configure
-    {
-        eprintln!("Running: {:?}", configure);
-
-        let output = configure
-            .output()
-            .expect(&format!("{:?} failed", configure));
-        if !output.status.success() {
-            println!("configure: {}", String::from_utf8_lossy(&output.stdout));
-
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "configure failed {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ),
-            ));
-        }
-    }
+    run_cmd(configure)?;
 
     // run make
-    if !try!(
-        Command::new("make")
-            .arg("-j")
-            .arg(num_cpus::get().to_string())
-            .current_dir(&source())
-            .status()
-    ).success()
-    {
-        return Err(io::Error::new(io::ErrorKind::Other, "make failed"));
-    }
+    let mut make = Command::new("make");
+    make.current_dir(&source())
+        .arg("-j")
+        .arg(num_cpus::get().to_string());
+    run_cmd(make)?;
 
     // Copy over the binaries
     fs::rename(source().join("ffmpeg"), output().join("ffmpeg"))?;
