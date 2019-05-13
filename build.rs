@@ -27,19 +27,19 @@ static LIBRARIES: &[Library] = &[
 
 fn version() -> String {
     let major: u8 = env::var("CARGO_PKG_VERSION_MAJOR")
-        .unwrap()
+        .expect("`CARGO_PKG_VERSION_MAJOR` is always set in build; qed")
         .parse()
-        .unwrap();
+        .expect("`CARGO_PKG_VERSION_MAJOR` is always a number; qed");
     let minor: u8 = env::var("CARGO_PKG_VERSION_MINOR")
-        .unwrap()
+        .expect("`CARGO_PKG_VERSION_MINOR` is always set in build; qed")
         .parse()
-        .unwrap();
+        .expect("`CARGO_PKG_VERSION_MINOR` is always a numer; qed");
 
     format!("{}.{}", major, minor)
 }
 
 fn output() -> PathBuf {
-    PathBuf::from(env::var("OUT_DIR").unwrap())
+    PathBuf::from(env::var("OUT_DIR").expect("`OUT_DIR` is always set in build; qed"))
 }
 
 fn source() -> PathBuf {
@@ -47,7 +47,7 @@ fn source() -> PathBuf {
 }
 
 fn search() -> PathBuf {
-    let mut absolute = env::current_dir().unwrap();
+    let mut absolute = env::current_dir().expect("`env::current_dir` always exists in build; qed");
     absolute.push(&output());
     absolute.push("dist");
 
@@ -101,8 +101,9 @@ fn build() -> io::Result<()> {
     configure.current_dir(&source());
     configure.arg(format!("--prefix={}", search().to_string_lossy()));
 
-    if env::var("TARGET").unwrap() != env::var("HOST").unwrap() {
-        configure.arg(format!("--cross-prefix={}-", env::var("TARGET").unwrap()));
+    if env::var("TARGET").expect("`TARGET` is always set in build; qed") != 
+        env::var("HOST").expect("`HOST` is always set in build; qed") {
+        configure.arg(format!("--cross-prefix={}-", env::var("TARGET").expect("`TARGET` is always set in build; qed")));
     }
 
     configure.arg("--disable-doc");
@@ -267,8 +268,8 @@ fn main() {
         fs::create_dir_all(&output())
             .ok()
             .expect("failed to create build directory");
-        fetch().unwrap();
-        build().unwrap();
+        fetch().expect("fetch failed");
+        build().expect("build failed");
     }
     eprintln!("\n\nFinished building FFMpeg at: {:?}\n\n", source());
 }
