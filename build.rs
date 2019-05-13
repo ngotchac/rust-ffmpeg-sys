@@ -96,7 +96,12 @@ fn switch(configure: &mut Command, feature: &str, name: &str) {
     
 }
 
-fn build_libx264() -> io::Result<()> {
+fn fetch_libx264() -> io::Result<()> {
+    if let Ok(meta) = fs::metadata(&output().join("x264")) {
+        if meta.is_dir() {
+            return Ok(());
+        }
+    }
     let fetch_status = Command::new("git")
         .current_dir(&output())
         .arg("clone")
@@ -110,12 +115,18 @@ fn build_libx264() -> io::Result<()> {
     if !fetch_status.success() {
         return Err(io::Error::new(io::ErrorKind::Other, "x264 fetch failed"))
     }
+    Ok(())
+}
+
+fn build_libx264() -> io::Result<()> {
+    fetch_libx264()?;
 
     let configure_status = Command::new("./configure")
         .current_dir(&output().join("x264"))
-        .arg("--prefix").arg(search())
-        .arg("--bindir").arg(output().join("bin"))
+        .arg(format!("--prefix={}", search().to_string_lossy()))
+        .arg(format!("--bindir={}", output().join("bin").to_string_lossy()))
         .arg("--enable-static")
+        .arg("--disable-shared")
         .arg("--disable-asm")
         .status();
     let configure_status = match configure_status {
@@ -146,6 +157,7 @@ fn build() -> io::Result<()> {
     configure.arg(format!("--prefix={}", search().to_string_lossy()));
     configure.arg(format!("--extra-cflags=\"-I{}\"", search().join("include").to_string_lossy()));
     configure.arg(format!("--extra-ldflags=\"-L{}\"", search().join("lib").to_string_lossy()));
+    configure.arg("--extra-libs=-ldl");
 
     if env::var("TARGET").expect("`TARGET` is always set in build; qed") != 
         env::var("HOST").expect("`HOST` is always set in build; qed") {
@@ -287,17 +299,6 @@ fn build() -> io::Result<()> {
     {
         return Err(io::Error::new(io::ErrorKind::Other, "make failed"));
     }
-
-    // run make install
-    // if !try!(
-    //     Command::new("make")
-    //         .current_dir(&source())
-    //         .arg("install")
-    //         .status()
-    // ).success()
-    // {
-    //     return Err(io::Error::new(io::ErrorKind::Other, "make install failed"));
-    // }
 
     // Copy over the binaries
     fs::rename(source().join("ffmpeg"), output().join("ffmpeg"))?;
